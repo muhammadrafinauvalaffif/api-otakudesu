@@ -1,79 +1,28 @@
-const express = require('express');
-const cors = require('cors');
-const app = express();
-const { inject } = require("@vercel/analytics");
-const path = require('path');
-require('dotenv').config();
+const { sequelize } = require('../config/database');
+const Anime = require('./anime');
+const Episode = require('./episode');
+const Batch = require('./batch');
+const { Genre, AnimeGenre } = require('./genre');
 
-// Import routes
-const originalRoute = require("./src/router/route");
-const dbRoute = require("./src/router/db.router");
-
-// Import database and scheduler
-const { testConnection } = require('./src/config/database');
-const scheduler = require('./src/services/schedular');
-
-// Initialize analytics
-inject();
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Use routes
-app.use(dbRoute); // New database-backed routes
-app.use(originalRoute); // Original routes for backward compatibility
-
-// Set up a static folder for documentation
-app.use('/docs', express.static(path.join(__dirname, 'docs')));
-
-// Root route redirect to documentation if available
-app.get('/', (req, res) => {
-  res.redirect('/docs');
-});
-
-// Get port from environment variables or use default
-const port = process.env.PORT || 8000;
-
-// Start the server
-const server = app.listen(port, async () => {
+// Initialize all models
+const initModels = async () => {
   try {
-    console.log(`Server running on http://localhost:${port}`);
-    
-    // Test database connection
-    const dbConnected = await testConnection();
-    
-    if (dbConnected) {
-      // Initialize the scheduler if auto-scraping is enabled
-      if (process.env.ENABLE_AUTO_SCRAPE === 'true') {
-        await scheduler.init();
-        console.log('Auto-scraping scheduler initialized');
-      } else {
-        console.log('Auto-scraping is disabled');
-      }
-    } else {
-      console.error('Server started, but database connection failed.');
-    }
+    // Sync all models with the database
+    // Using force: false to avoid dropping tables if they already exist
+    await sequelize.sync({ force: false, alter: true });
+    console.log('All models were synchronized successfully.');
+    return true;
   } catch (error) {
-    console.error('Error starting server:', error);
+    console.error('Failed to synchronize models:', error);
+    return false;
   }
-});
+};
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received. Closing server and stopping scheduler.');
-  scheduler.stopAll();
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received. Closing server and stopping scheduler.');
-  scheduler.stopAll();
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+module.exports = {
+  initModels,
+  Anime,
+  Episode,
+  Batch,
+  Genre,
+  AnimeGenre
+};
